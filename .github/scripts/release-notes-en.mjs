@@ -63,15 +63,43 @@ async function fetchPr(number) {
   return response.json();
 }
 
+/**
+ * Texto que veio da API (título e descrição de um PR, que qualquer autor
+ * escreve) vira texto puro nas notas: uma linha só, sem caracteres de
+ * controle, curta, e com o markdown e o HTML escapados. Sem isso, um título
+ * poderia pôr um link, uma imagem ou HTML nas notas publicadas.
+ */
+function plainText(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200)
+    .replace(/[\\`*_{}[\]()<>#+!|~]/g, '\\$&');
+}
+
 /** "EN: …" numa linha própria da descrição (também dentro de um comentário HTML). */
 function englishTitle(pr) {
   const match = (pr.body || '').match(/^[ \t]*(?:<!--[ \t]*)?EN[ \t]*:[ \t]*(.+?)[ \t]*(?:-->)?[ \t]*$/im);
 
-  return (match?.[1] || pr.title).trim();
+  return plainText(match?.[1] || pr.title);
+}
+
+/** Login do GitHub como o GitHub permite (letras, números, hífen; bots com [bot]). */
+function login(pr) {
+  const value = String(pr.user?.login ?? '');
+
+  return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$/.test(value) ? value : null;
 }
 
 function line(pr) {
-  return `- ${englishTitle(pr)} ([#${pr.number}](${pr.html_url})) by [@${pr.user.login}](${pr.user.html_url})`;
+  // Os links são montados aqui, a partir do número e do login validados, e
+  // não copiados da resposta da API.
+  const number = Number.parseInt(pr.number, 10);
+  const author = login(pr);
+  const by = author ? ` by [@${author.replace(/[[\]]/g, '\\$&')}](https://github.com/${encodeURIComponent(author.replace(/\[bot\]$/, ''))})` : '';
+
+  return `- ${englishTitle(pr)} ([#${number}](${repoUrl}/pull/${number}))${by}`;
 }
 
 const prs = [];
