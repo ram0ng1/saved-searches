@@ -172,6 +172,25 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
         $this->assertSame(21, $this->search(1)->last_post_id);
     }
 
+    /**
+     * Na fila sync o e-mail sai dentro da rodada; um servidor de e-mail fora
+     * do ar não pode desfazer o aviso que já apareceu no sino.
+     */
+    public function test_falha_no_email_nao_perde_o_aviso(): void
+    {
+        $this->setting('mail_driver', 'smtp');
+        $this->setting('mail_host', '127.0.0.1');
+        $this->setting('mail_port', '1');
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [$this->savedSearch(1, 2, 'author:autora', ['author' => 'autora'], lastPostId: 20)]],
+            ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
+        ));
+
+        $this->assertSame(1, $this->runSearches());
+        $this->assertCount(1, $this->notificationsFor(2));
+        $this->assertNotNull($this->search(1)->last_notified_at);
+    }
+
     public function test_texto_livre(): void
     {
         $this->prepareDatabase($this->merge(

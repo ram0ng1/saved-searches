@@ -120,7 +120,14 @@ class SavedSearchRunner
             return false;
         }
 
-        $this->notifications->sync(new SavedSearchBlueprint($search, $latest, count($matches)), [$user]);
+        try {
+            $this->notifications->sync(new SavedSearchBlueprint($search, $latest, count($matches)), [$user]);
+        } catch (Throwable $e) {
+            // Na fila sync o e-mail sai aqui dentro: servidor de e-mail fora do
+            // ar não desfaz o aviso que já foi gravado no sino.
+            $this->log->warning('[saved-searches] notification delivery for search '.$search->id.' failed: '.$e->getMessage());
+        }
+
         $this->advance($search, $ceiling, $now, true);
 
         return true;
