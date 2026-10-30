@@ -1,5 +1,6 @@
 import app from 'flarum/forum/app';
 import extractText from 'flarum/common/utils/extractText';
+import type DiscussionListState from 'flarum/forum/states/DiscussionListState';
 
 import type SavedSearch from '../../common/models/SavedSearch';
 import type { Frequency } from '../../common/models/SavedSearch';
@@ -34,10 +35,12 @@ export function filtersFor(query: string): Record<string, string | string[]> {
  * à API (com os de outras extensões, como a tag da página) e o texto
  * montado a partir deles, para o nome bater com o que vai rodar.
  */
-export function currentSearch(): { query: string; filters: Record<string, string | string[]> } | null {
+export function currentSearch(state: DiscussionListState = app.discussions): { query: string; filters: Record<string, string | string[]> } | null {
   if (!app.search.state.getInitialSearch()) return null;
 
-  const filters: Record<string, string | string[]> = { ...(app.discussions.requestParams().filter || {}) };
+  // O q da URL pode trazer gambits em texto; o Store só os converte na hora de buscar.
+  const filters: Record<string, string | string[]> = app.search.gambits.apply('discussions', { ...(state.requestParams().filter || {}) });
+  if (!filters.q) delete filters.q;
   const { q, ...rest } = filters;
   const query = app.search.gambits.from('discussions', typeof q === 'string' ? q : '', rest).trim();
 

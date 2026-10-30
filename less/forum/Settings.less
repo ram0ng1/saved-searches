@@ -23,6 +23,17 @@
     font-weight: 600;
   }
 
+  // Largura fixa: o select nativo mede só o texto, e nos temas com seta
+  // própria a opção mais longa ficava por baixo dela.
+  &-frequency {
+    flex: 0 0 13em;
+    width: 13em;
+
+    .Select-input {
+      width: 100%;
+    }
+  }
+
   &-empty {
     color: var(--muted-color);
   }

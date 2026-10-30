@@ -101,7 +101,7 @@ export default class SavedSearchesSettings extends Component {
 
     return (
       <Select
-        className="SavedSearchesSettings-frequency"
+        wrapperAttrs={{ className: 'SavedSearchesSettings-frequency' }}
         aria-label={query ? tText('settings.frequency_of_label', { query }) : tText('settings.frequency_label')}
         options={options}
         value={value}
