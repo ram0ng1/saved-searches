@@ -12,16 +12,20 @@
 namespace Ramon\SavedSearches\Search;
 
 use Carbon\Carbon;
+use Closure;
 use Flarum\Discussion\Discussion;
 use Flarum\Notification\NotificationSyncer;
 use Flarum\Post\Post;
 use Flarum\Search\SearchCriteria;
 use Flarum\Search\SearchManager;
 use Flarum\User\User;
+use Illuminate\Database\Connection;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Psr\Log\LoggerInterface;
 use Ramon\SavedSearches\Notification\SavedSearchBlueprint;
+use PDO;
 use Ramon\SavedSearches\SavedSearch;
 use Throwable;
 
@@ -49,11 +53,11 @@ class SavedSearchRunner
      */
     public const TIME_BUDGET = 240.0;
 
-
     public function __construct(
         protected SearchManager $search,
         protected NotificationSyncer $notifications,
-        protected LoggerInterface $log
+        protected LoggerInterface $log,
+        protected ConnectionInterface $db
     ) {
     }
 
@@ -120,16 +124,16 @@ class SavedSearchRunner
         $words = $this->words(is_string($filters['q'] ?? null) ? $filters['q'] : '');
         unset($filters['q']);
 
-        $matches = $this->newPosts($search, $user, $ceiling, $words);
+        $matches = $this->withoutJit(fn () => $this->newPosts($search, $user, $ceiling, $words));
 
         if ($matches !== [] && $filters !== []) {
             $filters['id'] = array_keys($matches);
 
-            $matched = $this->search
+            $matched = $this->withoutJit(fn () => $this->search
                 ->query(Discussion::class, new SearchCriteria($user, $filters, count($matches), 0, ['lastPostedAt' => 'desc']))
                 ->getResults()
                 ->pluck('id')
-                ->all();
+                ->all());
 
             $matches = array_intersect_key($matches, array_flip($matched));
         }
@@ -212,6 +216,31 @@ class SavedSearchRunner
             ->map(fn ($id) => (int) $id)
             ->mapWithKeys(fn (int $id, $discussionId) => [(int) $discussionId => $id])
             ->all();
+    }
+
+    /**
+     * As subconsultas de permissão das tags inflam o custo estimado e fazem o
+     * PostgreSQL compilar a consulta com JIT: num processador fraco, segundos
+     * de compilação para milissegundos de execução. Desligado só aqui, numa
+     * transação de leitura (o SET LOCAL acaba com ela).
+     *
+     * @template T
+     * @param Closure(): T $callback
+     * @return T
+     */
+    protected function withoutJit(Closure $callback): mixed
+    {
+        $db = $this->db;
+
+        if (! $db instanceof Connection || $db->getDriverName() !== 'pgsql' || version_compare((string) $db->getPdo()->getAttribute(PDO::ATTR_SERVER_VERSION), '11', '<')) {
+            return $callback();
+        }
+
+        return $db->transaction(function () use ($db, $callback) {
+            $db->statement('SET LOCAL jit = off');
+
+            return $callback();
+        });
     }
 
     /**

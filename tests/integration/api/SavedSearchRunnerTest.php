@@ -335,4 +335,31 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
         $this->assertSame(1, $this->runSearches());
         $this->assertSame(1, $this->notificationsFor(2)[0]['data']['searchId']);
     }
+
+    public function test_sem_jit_do_postgresql(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [
+                $this->savedSearch(1, 2, 'resposta author:autora', ['q' => 'resposta', 'author' => 'autora'], lastPostId: 20),
+            ]],
+            ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
+        ));
+
+        if ($this->database()->getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('JIT só existe no PostgreSQL.');
+        }
+
+        // As subconsultas de permissão passam do custo que liga o JIT; a
+        // compilação levava segundos por busca num processador fraco.
+        $jit = [];
+        $this->database()->listen(function ($query) use (&$jit) {
+            if (str_contains($query->sql, 'latest_id') || str_contains($query->sql, 'from "discussions"')) {
+                $jit[] = $this->database()->selectOne('show jit')->jit;
+            }
+        });
+
+        $this->assertSame(1, $this->runSearches());
+        $this->assertNotEmpty($jit);
+        $this->assertSame(['off'], array_values(array_unique($jit)));
+    }
 }
