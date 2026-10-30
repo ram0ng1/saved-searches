@@ -152,6 +152,58 @@ class SavedSearchesApiTest extends SavedSearchesTestCase
         $this->assertEquals(422, $response->getStatusCode(), (string) $response->getBody());
     }
 
+    /** `is:unread` vira `{unread: true}` no frontend; a URL manda o texto "true". */
+    public function test_aceita_filtro_booleano_e_guarda_como_texto(): void
+    {
+        $response = $this->create(2, ['query' => 'is:unread', 'filters' => ['unread' => true, 'page' => 2]]);
+
+        $this->assertEquals(201, $response->getStatusCode(), (string) $response->getBody());
+        $this->assertSame(['unread' => 'true', 'page' => '2'], $this->json($response)['data']['attributes']['filters']);
+    }
+
+    public function test_texto_da_busca_tem_de_ser_texto(): void
+    {
+        $this->assertEquals(422, $this->create(2, ['query' => 'a', 'filters' => ['q' => ['a']]])->getStatusCode());
+    }
+
+    public function test_recusa_busca_em_branco(): void
+    {
+        $this->assertEquals(422, $this->create(2, ['query' => '   ', 'filters' => []])->getStatusCode());
+    }
+
+    /** Texto e filtros andam juntos: trocar só um faria a busca rodar outra coisa. */
+    public function test_texto_e_filtros_nao_mudam_depois_de_salvos(): void
+    {
+        $response = $this->send($this->request('PATCH', '/api/saved-searches/1', [
+            'authenticatedAs' => 3,
+            'json' => ['data' => ['type' => 'saved-searches', 'id' => '1', 'attributes' => ['query' => 'outra coisa']]],
+        ]));
+
+        $this->assertNotEquals(200, $response->getStatusCode());
+        $this->assertSame('da autora', $this->search(1)->query);
+    }
+
+    public function test_limite_do_admin_tem_teto(): void
+    {
+        $this->setting('ramon-saved-searches.max_per_user', 1000);
+        $rows = [];
+        for ($i = 1; $i <= 50; $i++) {
+            $rows[] = $this->savedSearch(100 + $i, 2, "busca $i", ['q' => "busca $i"]);
+        }
+        $this->prepareDatabase(['saved_searches' => $rows]);
+
+        $this->assertEquals(422, $this->create(2, ['query' => 'mais uma', 'filters' => ['q' => 'mais uma']])->getStatusCode());
+    }
+
+    /** O e-mail é opt-in: "assim que possível" mandaria até 288 por dia. */
+    public function test_email_desligado_por_padrao(): void
+    {
+        $this->app();
+
+        $this->assertFalse((bool) \Flarum\User\User::query()->find(2)->getPreference('notify_savedSearch_email'));
+        $this->assertTrue((bool) \Flarum\User\User::query()->find(2)->getPreference('notify_savedSearch_alert'));
+    }
+
     public function test_recusa_frequencia_desconhecida(): void
     {
         $this->assertEquals(422, $this->create(2, ['query' => 'x', 'filters' => ['q' => 'x'], 'frequency' => 'monthly'])->getStatusCode());

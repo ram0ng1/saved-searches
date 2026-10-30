@@ -45,6 +45,7 @@ class SavedSearches extends Type
                 $export[] = [
                     "saved-searches/search-{$search->id}.json" => $this->encodeForExport([
                         'query' => $search->query,
+                        'filters' => $search->filters,
                         'frequency' => $search->frequency,
                         'created_at' => $search->created_at?->toIso8601String(),
                     ]),

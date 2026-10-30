@@ -38,6 +38,8 @@ class SavedSearchResource extends AbstractDatabaseResource
     /** Tamanho máximo dos filtros guardados, em JSON. */
     public const MAX_FILTERS_LENGTH = 1000;
 
+    public const MAX_PER_USER = 50;
+
     public function __construct(
         protected SettingsRepositoryInterface $settings,
         protected TranslatorInterface $translator
@@ -79,15 +81,19 @@ class SavedSearchResource extends AbstractDatabaseResource
     public function fields(): array
     {
         return [
+            // Texto e filtros só na criação: andam juntos, e trocar um sem o
+            // outro faria a busca rodar algo diferente do que mostra.
             Schema\Str::make('query')
                 ->requiredOnCreate()
-                ->writable()
-                ->minLength(1)
+                ->writableOnCreate()
                 ->maxLength(255)
+                ->regex('/\\S/u')
                 ->set(fn (SavedSearch $search, string $value) => $search->query = trim($value)),
             Schema\Arr::make('filters')
-                ->writable()
-                ->rule(fn () => $this->filtersRule()),
+                ->requiredOnCreate()
+                ->writableOnCreate()
+                ->rule(fn () => $this->filtersRule())
+                ->set(fn (SavedSearch $search, array $value) => $search->filters = self::normalizeFilters($value)),
             Schema\Str::make('frequency')
                 ->writable()
                 ->in(Frequency::ALL),
@@ -121,7 +127,7 @@ class SavedSearchResource extends AbstractDatabaseResource
 
     public function creating(object $model, OriginalContext $context): ?object
     {
-        $max = max(1, (int) $this->settings->get('ramon-saved-searches.max_per_user', 5));
+        $max = self::maxPerUser($this->settings);
         $count = SavedSearch::query()->where('user_id', $model->user_id)->count();
 
         if ($count >= $max) {
@@ -139,25 +145,53 @@ class SavedSearchResource extends AbstractDatabaseResource
         return parent::creating($model, $context);
     }
 
+    /** Limite do admin, com teto: o campo do painel vai até 50. */
+    public static function maxPerUser(SettingsRepositoryInterface $settings): int
+    {
+        return min(self::MAX_PER_USER, max(1, (int) $settings->get('ramon-saved-searches.max_per_user', 5)));
+    }
+
     /**
-     * Filtros como a API de discussões recebe: chaves curtas e valores texto
-     * (ou lista de textos). Qualquer outra forma derruba a busca agendada.
+     * Valores como a URL os entrega ao filtro (`is:unread` vira "true"):
+     * os filtros do core recebem texto ou lista de texto.
+     *
+     * @param array<array-key, mixed> $filters
+     * @return array<string, string|list<string>>
+     */
+    public static function normalizeFilters(array $filters): array
+    {
+        $scalar = fn (mixed $value): string => is_bool($value) ? ($value ? 'true' : 'false') : (string) $value;
+
+        $out = [];
+        foreach ($filters as $key => $value) {
+            $out[(string) $key] = is_array($value) ? array_map($scalar, array_values($value)) : $scalar($value);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Filtros como a API de discussões recebe: chaves curtas e valores
+     * simples (ou lista deles); `q` é sempre texto.
      */
     protected function filtersRule(): Closure
     {
         return function (string $attribute, mixed $value, Closure $fail) {
+            $invalid = fn () => $fail($this->translator->trans('ramon-saved-searches.api.invalid_filters'));
+
             if (! is_array($value) || strlen((string) json_encode($value)) > self::MAX_FILTERS_LENGTH) {
-                $fail($this->translator->trans('ramon-saved-searches.api.invalid_filters'));
+                $invalid();
 
                 return;
             }
 
             foreach ($value as $key => $item) {
-                $valid = is_string($key) && preg_match('/^-?[A-Za-z][A-Za-z0-9_.-]{0,39}$/', $key)
-                    && (is_string($item) || (is_array($item) && array_is_list($item) && array_filter($item, 'is_string') === $item));
+                $validKey = is_string($key) && preg_match('/^-?[A-Za-z][A-Za-z0-9_.-]{0,39}$/', $key);
+                $validValue = is_scalar($item)
+                    || (is_array($item) && array_is_list($item) && count(array_filter($item, 'is_scalar')) === count($item));
 
-                if (! $valid) {
-                    $fail($this->translator->trans('ramon-saved-searches.api.invalid_filters'));
+                if (! $validKey || ! $validValue || ($key === 'q' && ! is_string($item))) {
+                    $invalid();
 
                     return;
                 }

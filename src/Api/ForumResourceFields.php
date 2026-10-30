@@ -14,6 +14,7 @@ namespace Ramon\SavedSearches\Api;
 use Flarum\Api\Context;
 use Flarum\Api\Schema;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Ramon\SavedSearches\Api\Resource\SavedSearchResource;
 
 /**
  * O que o fórum precisa para mostrar (ou não) as buscas salvas.
@@ -34,7 +35,7 @@ class ForumResourceFields
             Schema\Boolean::make('canUseSavedSearches')
                 ->get(fn (object $forum, Context $context) => $context->getActor()->hasPermission('savedSearches.use')),
             Schema\Integer::make('savedSearchesMax')
-                ->get(fn () => max(1, (int) $this->settings->get('ramon-saved-searches.max_per_user', 5))),
+                ->get(fn () => SavedSearchResource::maxPerUser($this->settings)),
         ];
     }
 }
