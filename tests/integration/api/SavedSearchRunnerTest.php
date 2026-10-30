@@ -169,7 +169,7 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
         ));
 
         $this->assertSame(1, $this->runSearches());
-        $this->assertSame(21, $this->search(1)->last_post_id);
+        $this->assertSame(21, $this->search(2)->last_post_id);
     }
 
     /**
@@ -189,6 +189,54 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
         $this->assertSame(1, $this->runSearches());
         $this->assertCount(1, $this->notificationsFor(2));
         $this->assertNotNull($this->search(1)->last_notified_at);
+    }
+
+    /** Mais que uma página de resultados: nada se perde nem o total fica cortado. */
+    public function test_nao_corta_em_50_discussoes(): void
+    {
+        $parts = [['saved_searches' => [$this->savedSearch(1, 2, 'author:autora', ['author' => 'autora'], lastPostId: 20)]]];
+        for ($i = 0; $i < 60; $i++) {
+            $parts[] = $this->discussion(100 + $i, "Discussão $i", 'texto', at: Carbon::now()->subMinutes(60 - $i));
+        }
+        $this->prepareDatabase($this->merge(...$parts));
+
+        $this->runSearches();
+
+        $this->assertSame(60, $this->notificationsFor(2)[0]['data']['count']);
+    }
+
+    /** Erro na rodada não pode pular o que chegou: a próxima tenta de novo. */
+    public function test_erro_nao_avanca_o_marcador(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [$this->savedSearch(1, 2, 'quebrada', ['q' => ['não', 'é', 'texto']], lastPostId: 20)]],
+            ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
+        ));
+
+        $this->runSearches();
+
+        $this->assertSame(20, $this->search(1)->last_post_id);
+    }
+
+    public function test_respeita_marcar_tudo_como_lido(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [$this->savedSearch(1, 2, 'author:autora', ['author' => 'autora'], lastPostId: 20)]],
+            ['posts' => [$this->post(21, 1, 2, 'resposta nova', at: Carbon::now()->subMinute())]],
+        ));
+        $this->database()->table('users')->where('id', 2)->update(['marked_all_as_read_at' => Carbon::now()]);
+
+        $this->assertSame(0, $this->runSearches());
+    }
+
+    public function test_filtro_booleano(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [$this->savedSearch(1, 2, 'is:unread author:autora', ['unread' => 'true', 'author' => 'autora'], lastPostId: 20)]],
+            ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
+        ));
+
+        $this->assertSame(1, $this->runSearches());
     }
 
     public function test_texto_livre(): void

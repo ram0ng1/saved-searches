@@ -29,15 +29,15 @@ use Throwable;
  * Roda as buscas salvas vencidas e avisa o dono do que apareceu desde a
  * última vez.
  *
- * A busca é a mesma do fórum (SearchManager), feita como o dono: filtros,
- * gambits de outras extensões e permissões valem igual. O resultado são
- * discussões; contam só os comentários novos de outras pessoas que o dono
- * ainda não leu.
+ * Primeiro acha as discussões com comentários novos que contam para o dono
+ * (de outra pessoa, visíveis a ele e ainda não lidos); depois roda a busca
+ * do fórum (SearchManager) como o dono, só nessas discussões. Filtros,
+ * gambits de outras extensões e permissões valem igual à busca normal.
  */
 class SavedSearchRunner
 {
-    /** Discussões mais recentes que cada busca examina por rodada. */
-    public const CANDIDATES = 50;
+    /** Discussões com novidade examinadas por busca e rodada. */
+    public const MAX_CANDIDATES = 1000;
 
     public function __construct(
         protected SearchManager $search,
@@ -64,9 +64,11 @@ class SavedSearchRunner
                     try {
                         $notified += $this->run($search, $ceiling, $now) ? 1 : 0;
                     } catch (Throwable $e) {
-                        // Uma busca com filtro inválido não pode travar as outras.
+                        // Uma busca com problema não trava as outras e não perde
+                        // resultados: o marcador fica onde estava.
                         $this->log->warning('[saved-searches] search '.$search->id.' failed: '.$e->getMessage());
-                        $this->advance($search, $ceiling, $now, false);
+                        $search->last_searched_at = $now;
+                        $search->save();
                     }
                 }
             });
@@ -84,27 +86,24 @@ class SavedSearchRunner
             return false;
         }
 
-        // Atalho barato antes da busca completa: nenhum comentário novo de outra pessoa.
-        $anyNew = Post::query()
-            ->where('type', 'comment')
-            ->where('id', '>', $search->last_post_id)
-            ->where('id', '<=', $ceiling)
-            ->where(fn (Builder $query) => $query->whereNull('user_id')->orWhere('user_id', '!=', $user->id))
-            ->exists();
+        $candidates = $this->newPosts($search, $user, $ceiling);
 
-        if (! $anyNew) {
+        if ($candidates === []) {
             $this->advance($search, $ceiling, $now, false);
 
             return false;
         }
 
-        $discussionIds = $this->search
-            ->query(Discussion::class, new SearchCriteria($user, $this->filters($search), self::CANDIDATES, 0, ['lastPostedAt' => 'desc']))
+        $filters = $this->filters($search);
+        $filters['id'] = array_keys($candidates);
+
+        $matched = $this->search
+            ->query(Discussion::class, new SearchCriteria($user, $filters, count($candidates), 0, ['lastPostedAt' => 'desc']))
             ->getResults()
             ->pluck('id')
             ->all();
 
-        $matches = $discussionIds ? $this->newPosts($search, $user, $discussionIds, $ceiling) : [];
+        $matches = array_intersect_key($candidates, array_flip($matched));
 
         if ($matches === []) {
             $this->advance($search, $ceiling, $now, false);
@@ -134,21 +133,23 @@ class SavedSearchRunner
     }
 
     /**
-     * O comentário mais novo de cada discussão encontrada, contando só o
-     * que é de outra pessoa, visível ao dono e ainda não lido por ele.
+     * Discussões com comentário novo que conta para o dono: de outra
+     * pessoa, visível a ele e ainda não lido (nem pela leitura da
+     * discussão, nem pelo "marcar tudo como lido").
      *
-     * @param list<int> $discussionIds
-     * @return list<int> ids dos posts, um por discussão
+     * @return array<int, int> id da discussão => id do comentário mais novo
      */
-    protected function newPosts(SavedSearch $search, User $user, array $discussionIds, int $ceiling): array
+    protected function newPosts(SavedSearch $search, User $user, int $ceiling): array
     {
+        $grammar = Post::query()->getQuery()->getGrammar();
+
         return Post::whereVisibleTo($user)
-            ->whereIn('posts.discussion_id', $discussionIds)
             ->where('posts.type', 'comment')
             ->whereNull('posts.hidden_at')
             ->where('posts.id', '>', $search->last_post_id)
             ->where('posts.id', '<=', $ceiling)
             ->where(fn (Builder $query) => $query->whereNull('posts.user_id')->orWhere('posts.user_id', '!=', $user->id))
+            ->when($user->marked_all_as_read_at, fn (Builder $query, $markedAt) => $query->where('posts.created_at', '>', $markedAt))
             ->leftJoin('discussion_user as saved_search_state', function (JoinClause $join) use ($user) {
                 $join->on('saved_search_state.discussion_id', '=', 'posts.discussion_id')
                     ->where('saved_search_state.user_id', '=', $user->id);
@@ -158,10 +159,12 @@ class SavedSearchRunner
                 ->orWhereColumn('posts.number', '>', 'saved_search_state.last_read_post_number'))
             ->groupBy('posts.discussion_id')
             // wrap() aplica o prefixo de tabela, que o SQL cru não recebe.
-            ->selectRaw('max('.Post::query()->getQuery()->getGrammar()->wrap('posts.id').') as latest_id')
-            ->pluck('latest_id')
+            ->selectRaw($grammar->wrap('posts.discussion_id').' as discussion_id, max('.$grammar->wrap('posts.id').') as latest_id')
+            ->orderByDesc('latest_id')
+            ->limit(self::MAX_CANDIDATES)
+            ->pluck('latest_id', 'discussion_id')
             ->map(fn ($id) => (int) $id)
-            ->values()
+            ->mapWithKeys(fn (int $id, $discussionId) => [(int) $discussionId => $id])
             ->all();
     }
 

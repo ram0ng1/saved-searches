@@ -12,14 +12,17 @@
 namespace Ramon\SavedSearches;
 
 use Flarum\Api\Resource\ForumResource;
+use Flarum\Discussion\Search\DiscussionSearcher;
 use Flarum\Extend;
 use Flarum\Gdpr\Extend\UserData;
+use Flarum\Search\Database\DatabaseSearchDriver;
 use Flarum\User\User;
 use Ramon\SavedSearches\Api\ForumResourceFields;
 use Ramon\SavedSearches\Api\Resource\SavedSearchResource;
 use Ramon\SavedSearches\Console\RunSavedSearchesCommand;
 use Ramon\SavedSearches\Console\RunSavedSearchesSchedule;
 use Ramon\SavedSearches\Notification\SavedSearchBlueprint;
+use Ramon\SavedSearches\Search\DiscussionIdFilter;
 
 return [
     (new Extend\Frontend('forum'))
@@ -45,8 +48,12 @@ return [
     (new Extend\ApiResource(ForumResource::class))
         ->fields(ForumResourceFields::class),
 
+    // Por e-mail só se o membro ligar: "assim que possível" mandaria um a cada 5 minutos.
     (new Extend\Notification())
-        ->type(SavedSearchBlueprint::class, ['alert', 'email']),
+        ->type(SavedSearchBlueprint::class, ['alert']),
+
+    (new Extend\SearchDriver(DatabaseSearchDriver::class))
+        ->addFilter(DiscussionSearcher::class, DiscussionIdFilter::class),
 
     // A cada 5 minutos, para a frequência "imediata"; as outras esperam vencer.
     (new Extend\Console())
