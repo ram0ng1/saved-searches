@@ -157,7 +157,8 @@ class SavedSearchRunner
                 ->whereNull('saved_search_state.last_read_post_number')
                 ->orWhereColumn('posts.number', '>', 'saved_search_state.last_read_post_number'))
             ->groupBy('posts.discussion_id')
-            ->selectRaw('max(posts.id) as latest_id')
+            // wrap() aplica o prefixo de tabela, que o SQL cru não recebe.
+            ->selectRaw('max('.Post::query()->getQuery()->getGrammar()->wrap('posts.id').') as latest_id')
             ->pluck('latest_id')
             ->map(fn ($id) => (int) $id)
             ->values()
