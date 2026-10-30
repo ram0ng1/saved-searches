@@ -4,8 +4,6 @@ import Button from 'flarum/common/components/Button';
 import FieldSet from 'flarum/common/components/FieldSet';
 import Link from 'flarum/common/components/Link';
 import IndexPage from 'flarum/forum/components/IndexPage';
-import NotificationGrid from 'flarum/forum/components/NotificationGrid';
-import SettingsPage from 'flarum/forum/components/SettingsPage';
 import type ItemList from 'flarum/common/utils/ItemList';
 import type Mithril from 'mithril';
 
@@ -15,7 +13,9 @@ import { canUseSavedSearches, saveSearch, t } from './utils/savedSearches';
 export { default as extend } from './extend';
 
 app.initializers.add('ramon-saved-searches', () => {
-  extend(SettingsPage.prototype, 'settingsItems', function (items: ItemList<Mithril.Children>) {
+  // Configurações e grade de notificações são carregadas sob demanda: o extend
+  // pelo nome do módulo espera o chunk chegar.
+  extend('flarum/forum/components/SettingsPage', 'settingsItems', function (items: ItemList<Mithril.Children>) {
     if (!canUseSavedSearches()) return;
 
     items.add(
@@ -27,7 +27,7 @@ app.initializers.add('ramon-saved-searches', () => {
     );
   });
 
-  extend(NotificationGrid.prototype, 'notificationTypes', function (items: ItemList<any>) {
+  extend('flarum/forum/components/NotificationGrid', 'notificationTypes', function (items: ItemList<any>) {
     if (!canUseSavedSearches()) return;
 
     items.add('savedSearch', {
