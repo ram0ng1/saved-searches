@@ -4,6 +4,8 @@
 # workflow, e reduz o volume. Labels batem com .github/pr-labeler.yml.
 # Grupo cobre só minor+patch (auto-merge verde); MAJOR sai como PR
 # individual para revisão manual, sem contaminar o grupo.
+# `cooldown`: só propõe versões publicadas há 7 dias ou mais (pacote recém-
+# publicado pode ser malicioso ou instável).
 version: 2
 updates:
   - package-ecosystem: composer
@@ -12,6 +14,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     labels:
       - dependencias
     groups:
@@ -28,6 +32,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     labels:
       - dependencias
     groups:
@@ -44,6 +50,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     labels:
       - dependencias
     groups:

@@ -24,6 +24,7 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Psr\Log\LoggerInterface;
+use Ramon\SavedSearches\Database\ColumnAggregate;
 use Ramon\SavedSearches\Notification\SavedSearchBlueprint;
 use PDO;
 use Ramon\SavedSearches\SavedSearch;
@@ -179,7 +180,6 @@ class SavedSearchRunner
      */
     protected function newPosts(SavedSearch $search, User $user, int $ceiling, array $words): array
     {
-        $grammar = Post::query()->getQuery()->getGrammar();
         // LIKE ignora caixa no SQLite (ASCII) e nas collations _ci do MySQL; no PostgreSQL, ILIKE.
         $like = Post::query()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
 
@@ -211,8 +211,7 @@ class SavedSearchRunner
                     });
             })
             ->groupBy('posts.discussion_id')
-            // wrap() aplica o prefixo de tabela, que o SQL cru não recebe.
-            ->selectRaw($grammar->wrap('posts.discussion_id').' as discussion_id, max('.$grammar->wrap('posts.id').') as latest_id')
+            ->select(['posts.discussion_id', new ColumnAggregate('max', 'posts.id', 'latest_id')])
             ->orderByDesc('latest_id')
             ->limit(self::MAX_CANDIDATES)
             ->pluck('latest_id', 'discussion_id')
