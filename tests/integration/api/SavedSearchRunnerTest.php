@@ -162,7 +162,7 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
     {
         $this->prepareDatabase($this->merge(
             ['saved_searches' => [
-                $this->savedSearch(1, 2, 'quebrada', ['q' => ['não', 'é', 'texto']], lastPostId: 20),
+                $this->savedSearch(1, 2, 'quebrada', ['created' => ['não', 'é', 'data']], lastPostId: 20),
                 $this->savedSearch(2, 2, 'author:autora', ['author' => 'autora'], lastPostId: 20),
             ]],
             ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
@@ -209,7 +209,7 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
     public function test_erro_nao_avanca_o_marcador(): void
     {
         $this->prepareDatabase($this->merge(
-            ['saved_searches' => [$this->savedSearch(1, 2, 'quebrada', ['q' => ['não', 'é', 'texto']], lastPostId: 20)]],
+            ['saved_searches' => [$this->savedSearch(1, 2, 'quebrada', ['created' => ['não', 'é', 'data']], lastPostId: 20)]],
             ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
         ));
 
@@ -242,19 +242,65 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
     public function test_texto_livre(): void
     {
         $this->prepareDatabase($this->merge(
-            $this->discussion(3, 'Sobre gatos', 'gatos gostam de caixas', at: Carbon::now()),
+            $this->discussion(3, 'Sobre bichos', 'gatos gostam de caixas', at: Carbon::now()),
             ['saved_searches' => [$this->savedSearch(1, 2, 'gatos', ['q' => 'gatos'], lastPostId: 20)]],
             ['posts' => [$this->post(21, 1, 2, 'resposta sem relação')]],
         ));
-
-        // Depois do prepareDatabase: perguntar o banco já sobe o app e grava os dados.
-        if ($this->isMysql()) {
-            $this->markTestSkipped('O fulltext do MySQL não vê linhas da transação do teste.');
-        }
 
         $this->assertSame(1, $this->runSearches());
         $notification = $this->notificationsFor(2)[0];
         $this->assertSame(3, $notification['subject_id']);
         $this->assertSame(1, $notification['data']['count']);
+    }
+
+    /** Resposta sem as palavras conta se o título da discussão tem todas. */
+    public function test_texto_no_titulo_da_discussao(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [$this->savedSearch(1, 2, 'primeira', ['q' => 'primeira'], lastPostId: 20)]],
+            ['posts' => [$this->post(21, 1, 2, 'qualquer coisa')]],
+        ));
+
+        $this->assertSame(1, $this->runSearches());
+    }
+
+    public function test_todas_as_palavras_e_sem_caixa(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [
+                $this->savedSearch(1, 2, 'GATOS caixas', ['q' => 'GATOS caixas'], lastPostId: 20),
+                $this->savedSearch(2, 2, 'gatos cachorros', ['q' => 'gatos cachorros'], lastPostId: 20),
+            ]],
+            ['posts' => [$this->post(21, 1, 2, 'Os gatos adoram caixas')]],
+        ));
+
+        $this->assertSame(1, $this->runSearches());
+        $this->assertSame(1, $this->notificationsFor(2)[0]['data']['searchId']);
+    }
+
+    /** Curingas do LIKE no texto não viram "qualquer coisa". */
+    public function test_curingas_do_like_sao_texto(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [$this->savedSearch(1, 2, '%%', ['q' => '% _'], lastPostId: 20)]],
+            ['posts' => [$this->post(21, 1, 2, 'qualquer coisa')]],
+        ));
+
+        // Sem palavras válidas a busca vira "qualquer novidade", como a busca vazia do fórum.
+        $this->assertSame(1, $this->runSearches());
+    }
+
+    public function test_texto_com_outro_filtro(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [
+                $this->savedSearch(1, 2, 'resposta author:autora', ['q' => 'resposta', 'author' => 'autora'], lastPostId: 20),
+                $this->savedSearch(2, 2, 'resposta author:admin', ['q' => 'resposta', 'author' => 'admin'], lastPostId: 20),
+            ]],
+            ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
+        ));
+
+        $this->assertSame(1, $this->runSearches());
+        $this->assertSame(1, $this->notificationsFor(2)[0]['data']['searchId']);
     }
 }

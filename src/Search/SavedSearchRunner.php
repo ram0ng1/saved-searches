@@ -30,14 +30,19 @@ use Throwable;
  * última vez.
  *
  * Primeiro acha as discussões com comentários novos que contam para o dono
- * (de outra pessoa, visíveis a ele e ainda não lidos); depois roda a busca
- * do fórum (SearchManager) como o dono, só nessas discussões. Filtros,
- * gambits de outras extensões e permissões valem igual à busca normal.
+ * (de outra pessoa, visíveis a ele, ainda não lidos e, se a busca tem
+ * texto, com todas as palavras no comentário ou no título). Os outros
+ * filtros (autor, tag, não lidas…) rodam na busca do fórum como o dono,
+ * só nessas discussões.
+ *
+ * O texto não passa pelo fulltext do core: ele varre a tabela de posts
+ * inteira a cada busca, e aqui só os posts novos interessam.
  */
 class SavedSearchRunner
 {
     /** Discussões com novidade examinadas por busca e rodada. */
     public const MAX_CANDIDATES = 1000;
+
 
     public function __construct(
         protected SearchManager $search,
@@ -86,24 +91,23 @@ class SavedSearchRunner
             return false;
         }
 
-        $candidates = $this->newPosts($search, $user, $ceiling);
-
-        if ($candidates === []) {
-            $this->advance($search, $ceiling, $now, false);
-
-            return false;
-        }
-
         $filters = $this->filters($search);
-        $filters['id'] = array_keys($candidates);
+        $words = $this->words(is_string($filters['q'] ?? null) ? $filters['q'] : '');
+        unset($filters['q']);
 
-        $matched = $this->search
-            ->query(Discussion::class, new SearchCriteria($user, $filters, count($candidates), 0, ['lastPostedAt' => 'desc']))
-            ->getResults()
-            ->pluck('id')
-            ->all();
+        $matches = $this->newPosts($search, $user, $ceiling, $words);
 
-        $matches = array_intersect_key($candidates, array_flip($matched));
+        if ($matches !== [] && $filters !== []) {
+            $filters['id'] = array_keys($matches);
+
+            $matched = $this->search
+                ->query(Discussion::class, new SearchCriteria($user, $filters, count($matches), 0, ['lastPostedAt' => 'desc']))
+                ->getResults()
+                ->pluck('id')
+                ->all();
+
+            $matches = array_intersect_key($matches, array_flip($matched));
+        }
 
         if ($matches === []) {
             $this->advance($search, $ceiling, $now, false);
@@ -134,14 +138,18 @@ class SavedSearchRunner
 
     /**
      * Discussões com comentário novo que conta para o dono: de outra
-     * pessoa, visível a ele e ainda não lido (nem pela leitura da
-     * discussão, nem pelo "marcar tudo como lido").
+     * pessoa, visível a ele, ainda não lido (nem pela leitura da discussão,
+     * nem pelo "marcar tudo como lido") e, havendo palavras, com todas elas
+     * no comentário ou no título da discussão.
      *
+     * @param list<string> $words
      * @return array<int, int> id da discussão => id do comentário mais novo
      */
-    protected function newPosts(SavedSearch $search, User $user, int $ceiling): array
+    protected function newPosts(SavedSearch $search, User $user, int $ceiling, array $words): array
     {
         $grammar = Post::query()->getQuery()->getGrammar();
+        // LIKE ignora caixa no SQLite (ASCII) e nas collations _ci do MySQL; no PostgreSQL, ILIKE.
+        $like = Post::query()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
 
         return Post::whereVisibleTo($user)
             ->where('posts.type', 'comment')
@@ -157,6 +165,19 @@ class SavedSearchRunner
             ->where(fn (Builder $query) => $query
                 ->whereNull('saved_search_state.last_read_post_number')
                 ->orWhereColumn('posts.number', '>', 'saved_search_state.last_read_post_number'))
+            ->when($words, function (Builder $query) use ($words, $like) {
+                $query
+                    ->join('discussions as saved_search_discussion', 'saved_search_discussion.id', '=', 'posts.discussion_id')
+                    ->where(function (Builder $query) use ($words, $like) {
+                        foreach (['posts.content', 'saved_search_discussion.title'] as $column) {
+                            $query->orWhere(function (Builder $query) use ($words, $like, $column) {
+                                foreach ($words as $word) {
+                                    $query->where($column, $like, '%'.$word.'%');
+                                }
+                            });
+                        }
+                    });
+            })
             ->groupBy('posts.discussion_id')
             // wrap() aplica o prefixo de tabela, que o SQL cru não recebe.
             ->selectRaw($grammar->wrap('posts.discussion_id').' as discussion_id, max('.$grammar->wrap('posts.id').') as latest_id')
@@ -166,6 +187,19 @@ class SavedSearchRunner
             ->map(fn ($id) => (int) $id)
             ->mapWithKeys(fn (int $id, $discussionId) => [(int) $discussionId => $id])
             ->all();
+    }
+
+    /**
+     * Palavras do texto da busca. Sem % e _, curingas do LIKE que nem todo
+     * banco deixa escapar do mesmo jeito.
+     *
+     * @return list<string>
+     */
+    protected function words(string $text): array
+    {
+        $words = preg_split('/\s+/u', str_replace(['%', '_', '\\'], ' ', $text)) ?: [];
+
+        return array_slice(array_values(array_filter($words, fn (string $word) => mb_strlen($word) >= 2)), 0, 10);
     }
 
     /**
