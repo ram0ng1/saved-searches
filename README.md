@@ -4,20 +4,20 @@ Save a search on your Flarum 2 forum and get notified when new discussions or
 replies match it. Inspired by Discourse's
 [saved searches plugin](https://github.com/discourse/discourse-saved-searches).
 
-- **Save from the search page**: run a search and click **Save search**, or
-  type one in **Settings → Saved searches**.
+- **Save from the search page**: run a search and click **Save Search**, or
+  type one in **Settings → Saved Searches**.
 - **Same search as the forum**: words and filters work as they do in the
   forum search (`author:`, `is:unread`, `tag:` with flarum/tags…), with the
-  member's own permissions.
+  user's own permissions.
 - **How often**: as soon as possible (every 5 minutes), hourly, daily or
   weekly, per search.
 - **One notification per search and run**: it links to the newest result,
-  or to the search when there is more than one. Members choose alert and/or
+  or to the search when there is more than one. Users choose alert and/or
   email in their notification settings, like any other notification.
 - **Only what's new and unread**: replies and discussions posted after the
-  last check, by someone else, that the member can see and hasn't read yet.
-- **Limits and permission**: the *Save searches and get notified of new
-  results* permission (members by default) and a per-member maximum
+  last check, by someone else, that the user can see and hasn't read yet.
+- **Limits and permission**: the *Save searches and receive notifications of new
+  results* permission (members by default) and a per-user maximum
   (5 by default) in the extension settings.
 - **flarum/gdpr**: saved searches are included in data exports and removed
   when the account is erased or anonymised.

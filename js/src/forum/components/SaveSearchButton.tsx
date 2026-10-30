@@ -14,7 +14,7 @@ interface SaveSearchButtonAttrs {
 }
 
 /**
- * "Salvar busca" para a lista de discussões que está sendo mostrada. Usa as
+ * "Salvar Busca" para a lista de discussões que está sendo mostrada. Usa as
  * classes de botão do core, então segue o tema ativo.
  */
 export default class SaveSearchButton extends Component<SaveSearchButtonAttrs> {

@@ -37,7 +37,7 @@ app.initializers.add('ramon-saved-searches', () => {
     });
   });
 
-  // "Salvar busca" só aparece com uma busca ativa na lista de discussões.
+  // "Salvar Busca" só aparece com uma busca ativa na lista de discussões.
   extend(IndexPage.prototype, 'actionItems', function (items: ItemList<Mithril.Children>) {
     if (canUseSavedSearches() && currentSearch()) {
       items.add('saveSearch', <SaveSearchButton />, 50);

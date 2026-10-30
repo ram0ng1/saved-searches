@@ -1,10 +1,10 @@
 ramon-saved-searches:
   admin:
     permissions:
-      use_label: Salvar buscas e ser avisado de novos resultados
+      use_label: Salvar buscas e receber notificações de novos resultados
     settings:
-      max_per_user_label: Buscas salvas por membro
-      max_per_user_help: Quantas buscas cada membro pode salvar. As buscas salvas rodam a cada 5 minutos pelo agendador, então o cron do servidor precisa rodar `php flarum schedule:run`.
+      max_per_user_label: Buscas salvas por usuário
+      max_per_user_help: Quantas buscas cada usuário pode salvar. As buscas salvas rodam a cada 5 minutos pelo agendador, então o cron do servidor precisa rodar `php flarum schedule:run`.
 
   forum:
     frequencies:
@@ -16,22 +16,22 @@ ramon-saved-searches:
       single_text: "Novo resultado para “{query}”: {title}"
       multiple_text: "{count, plural, one {# novo resultado} other {# novos resultados}} para “{query}”"
     save_search:
-      button: Salvar busca
-      saved_message: Busca salva. Ela é verificada diariamente; mude a frequência nas suas configurações.
+      button: Salvar Busca
+      saved_message: Busca salva. Ela é verificada diariamente; altere a frequência nas suas configurações.
       manage_link: Gerenciar
     settings:
-      heading: Buscas salvas
-      help: Seja avisado quando alguém começar ou responder uma discussão que combine com uma das suas buscas. Escreva como na busca do fórum, filtros incluídos. Só conta o que você ainda não leu.
+      heading: Buscas Salvas
+      help: Receba uma notificação quando alguém iniciar ou responder a uma discussão que corresponda a uma das suas buscas. Escreva como na busca do fórum, filtros incluídos. Só conta o que você ainda não leu.
       empty: Você ainda não salvou nenhuma busca.
       query_label: Busca
       query_placeholder: Palavras ou filtros a buscar
       frequency_label: Com que frequência verificar
       frequency_of_label: "Com que frequência verificar “{query}”"
       add_button: Salvar
-      delete_button: "Apagar a busca salva “{query}”"
-      delete_confirm: "Apagar a busca salva “{query}”?"
-      limit_reached: "Você chegou ao limite de {max} buscas salvas. Apague uma para salvar outra."
-      notify_label: Algo novo combina com uma das minhas buscas salvas
+      delete_button: "Excluir a busca salva “{query}”"
+      delete_confirm: "Tem certeza de que deseja excluir a busca salva “{query}”?"
+      limit_reached: "Você atingiu o limite de {max} buscas salvas. Exclua uma para salvar outra."
+      notify_label: Alguém publica algo que corresponde a uma das minhas buscas salvas
 
   api:
     limit_reached: "Você pode salvar até {max} buscas."
@@ -49,15 +49,15 @@ ramon-saved-searches:
         Ver todos os resultados:
         {search_url}
 
-        Você pode mudar a frequência dos avisos, ou apagar esta busca, nas suas configurações.
+        Você pode alterar a frequência das notificações, ou excluir esta busca, nas suas configurações.
     html:
       body: |
         {count, plural, one {Há # novo resultado} other {Há # novos resultados}} para a sua busca salva “{query}”. O mais recente está em [{title}]({discussion_url}).
 
-        [Ver todos os resultados]({search_url}). Você pode mudar a frequência dos avisos, ou apagar esta busca, nas suas configurações.
+        [Ver todos os resultados]({search_url}). Você pode alterar a frequência das notificações, ou excluir esta busca, nas suas configurações.
 
   lib:
     gdpr:
       export_description: As buscas que você salvou e com que frequência rodam.
-      anonymize_description: As suas buscas salvas são apagadas.
-      delete_description: As suas buscas salvas são apagadas.
+      anonymize_description: As suas buscas salvas são excluídas.
+      delete_description: As suas buscas salvas são excluídas.
