@@ -3,5 +3,4 @@ vendor
 composer.lock
 .phpunit.cache
 .vscode
-.claude
 tests/integration/tmp/

@@ -16,7 +16,7 @@ concurrency:
 jobs:
   run:
     # Fixado por SHA, como as outras actions do repositório (2.x).
-    uses: flarum/framework/.github/workflows/REUSABLE_frontend.yml@cdc86216fced7409f218f38808b7fd3fc7882b17  # 2.x
+    uses: flarum/framework/.github/workflows/REUSABLE_frontend.yml@f31cf2f04b0bcdc214af8491a11f123247c7a8d5  # 2.x
     with:
       enable_bundlewatch: false
       enable_prettier: true

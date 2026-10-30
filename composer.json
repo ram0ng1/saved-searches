@@ -1,6 +1,6 @@
 {
     "name": "ramon/saved-searches",
-    "description": "Save a search and get notified when new discussions or replies match it.",
+    "description": "Save a search and receive notifications when new discussions or replies match it.",
     "keywords": [
         "flarum",
         "search",
@@ -51,8 +51,8 @@
             "title": "Saved Searches",
             "category": "feature",
             "icon": {
-                "name": "fas fa-bookmark",
-                "backgroundColor": "#2f6fdb",
+                "image": "icon.svg",
+                "backgroundColor": "#fff",
                 "color": "#fff"
             },
             "optional-dependencies": [

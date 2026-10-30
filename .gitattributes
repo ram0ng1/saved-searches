@@ -11,7 +11,6 @@
 /.gitignore             export-ignore
 /.gitattributes         export-ignore
 /.vscode                export-ignore
-/.claude                export-ignore
 /.editorconfig          export-ignore
 
 # Internal playbooks / notes — exclude every root .md from the tarball…
