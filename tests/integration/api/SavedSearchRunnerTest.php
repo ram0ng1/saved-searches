@@ -349,6 +349,10 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
             $this->markTestSkipped('JIT só existe no PostgreSQL.');
         }
 
+        if (version_compare((string) $this->database()->getPdo()->getAttribute(\PDO::ATTR_SERVER_VERSION), '11', '<')) {
+            $this->markTestSkipped('O PostgreSQL só tem JIT a partir do 11.');
+        }
+
         // As subconsultas de permissão passam do custo que liga o JIT; a
         // compilação levava segundos por busca num processador fraco.
         $jit = [];
