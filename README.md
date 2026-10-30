@@ -41,12 +41,18 @@ You can also run them by hand with `php flarum saved-searches:run`.
 
 ## How a search matches
 
-Each saved search runs Flarum's discussion search as its owner, newest
-activity first (the latest 50 discussions per run). A discussion counts when
-it has comments newer than the last check, written by someone else, visible
-to the owner and not read yet. Results are discussions, as in the forum
-search: a reply in a discussion that matches the search counts even if the
-reply itself doesn't contain the words.
+Each run looks only at comments posted since the search's last check. A
+discussion counts when one of those comments was written by someone else, is
+visible to the owner and hasn't been read yet, and, when the search has text,
+when every word appears in that comment or in the discussion's title (case
+doesn't matter). The other filters (`author:`, `tag:`, `is:unread`…) then run
+through Flarum's discussion search as the owner, on those discussions only.
+
+Because only new comments are scanned, a run stays cheap on large forums: it
+doesn't use the database's fulltext index, and its cost grows with the
+activity since the last check, not with the size of the forum. Each run
+checks up to 1000 discussions per search and stops after 4 minutes; searches
+it didn't reach are picked up by the next run.
 
 ## Updating
 
