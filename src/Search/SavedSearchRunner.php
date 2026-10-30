@@ -68,8 +68,11 @@ class SavedSearchRunner
      */
     public function runDue(?Carbon $now = null, ?float $budget = null): int
     {
-        $now ??= Carbon::now();
-        $budget ??= self::TIME_BUDGET;
+        return $this->withoutJit(fn () => $this->runDueSearches($now ?? Carbon::now(), $budget ?? self::TIME_BUDGET));
+    }
+
+    protected function runDueSearches(Carbon $now, float $budget): int
+    {
         $started = microtime(true);
         // Teto fixo da rodada: posts criados enquanto ela roda ficam para a próxima.
         $ceiling = (int) Post::query()->max('id');
@@ -124,16 +127,16 @@ class SavedSearchRunner
         $words = $this->words(is_string($filters['q'] ?? null) ? $filters['q'] : '');
         unset($filters['q']);
 
-        $matches = $this->withoutJit(fn () => $this->newPosts($search, $user, $ceiling, $words));
+        $matches = $this->newPosts($search, $user, $ceiling, $words);
 
         if ($matches !== [] && $filters !== []) {
             $filters['id'] = array_keys($matches);
 
-            $matched = $this->withoutJit(fn () => $this->search
+            $matched = $this->search
                 ->query(Discussion::class, new SearchCriteria($user, $filters, count($matches), 0, ['lastPostedAt' => 'desc']))
                 ->getResults()
                 ->pluck('id')
-                ->all());
+                ->all();
 
             $matches = array_intersect_key($matches, array_flip($matched));
         }
@@ -221,8 +224,9 @@ class SavedSearchRunner
     /**
      * As subconsultas de permissão das tags inflam o custo estimado e fazem o
      * PostgreSQL compilar a consulta com JIT: num processador fraco, segundos
-     * de compilação para milissegundos de execução. Desligado só aqui, numa
-     * transação de leitura (o SET LOCAL acaba com ela).
+     * de compilação para milissegundos de execução. Desligado uma vez por
+     * rodada, na conexão, e religado no fim (uma transação por busca custava
+     * três consultas a mais em cada uma).
      *
      * @template T
      * @param Closure(): T $callback
@@ -236,11 +240,13 @@ class SavedSearchRunner
             return $callback();
         }
 
-        return $db->transaction(function () use ($db, $callback) {
-            $db->statement('SET LOCAL jit = off');
+        $db->statement('SET jit = off');
 
+        try {
             return $callback();
-        });
+        } finally {
+            $db->statement('RESET jit');
+        }
     }
 
     /**
