@@ -48,7 +48,8 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
         $notifications = $this->notificationsFor(2);
         $this->assertCount(1, $notifications);
         $this->assertSame(1, $notifications[0]['subject_id']);
-        $this->assertSame(['searchId' => 1, 'query' => 'author:autora', 'count' => 1, 'postNumber' => 2], $notifications[0]['data']);
+        // O JSON do MySQL reordena as chaves.
+        $this->assertEquals(['searchId' => 1, 'query' => 'author:autora', 'count' => 1, 'postNumber' => 2], $notifications[0]['data']);
         $this->assertSame(21, $this->search(1)->last_post_id);
     }
 
