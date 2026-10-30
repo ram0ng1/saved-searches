@@ -1,0 +1,99 @@
+{
+    "name": "ramon/saved-searches",
+    "description": "Save a search and get notified when new discussions or replies match it.",
+    "keywords": [
+        "flarum",
+        "search",
+        "saved-searches",
+        "notifications"
+    ],
+    "type": "flarum-extension",
+    "license": "MIT",
+    "homepage": "https://github.com/ram0ng1/saved-searches",
+    "authors": [
+        {
+            "name": "Ramon Guilherme",
+            "email": "ramon@ramonguilherme.com.br",
+            "homepage": "https://ramonguilherme.com.br",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/ram0ng1/saved-searches/issues",
+        "source": "https://github.com/ram0ng1/saved-searches"
+    },
+    "require": {
+        "php": "^8.3",
+        "flarum/core": "^2.0.0"
+    },
+    "require-dev": {
+        "flarum/gdpr": "^2.0",
+        "flarum/phpstan": "^2.0",
+        "flarum/tags": "^2.0",
+        "flarum/testing": "^2.0",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5 || ^12.5.22 || ^13.2.0",
+        "roave/security-advisories": "dev-latest",
+        "vimeo/psalm": "^6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ramon\\SavedSearches\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ramon\\SavedSearches\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "flarum-extension": {
+            "title": "Saved Searches",
+            "category": "feature",
+            "icon": {
+                "name": "fas fa-bookmark",
+                "backgroundColor": "#2f6fdb",
+                "color": "#fff"
+            },
+            "optional-dependencies": [
+                "flarum/gdpr",
+                "flarum/tags"
+            ]
+        },
+        "flarum-cli": {
+            "modules": {
+                "admin": true,
+                "forum": true,
+                "js": true,
+                "jsCommon": true,
+                "css": true,
+                "locale": true,
+                "typescript": true,
+                "backendTesting": true
+            }
+        }
+    },
+    "scripts": {
+        "analyse:phpstan": "phpstan analyse --memory-limit=2G",
+        "clear-cache:phpstan": "phpstan clear-result-cache",
+        "test": [
+            "@test:unit",
+            "@test:integration"
+        ],
+        "test:unit": "phpunit -c tests/phpunit.unit.xml",
+        "test:integration": [
+            "Composer\\Config::disableProcessTimeout",
+            "phpunit -c tests/phpunit.integration.xml"
+        ],
+        "test:setup": "@php tests/integration/setup.php"
+    },
+    "scripts-descriptions": {
+        "analyse:phpstan": "Run static analysis",
+        "test": "Runs all tests.",
+        "test:unit": "Runs all unit tests.",
+        "test:integration": "Runs all integration tests.",
+        "test:setup": "Sets up a database for use with integration tests. Execute this only once."
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
