@@ -7,14 +7,14 @@
 // as mesmas labels do .github/release-drafter.yml, na mesma ordem.
 //
 // Entrada (env): GITHUB_TOKEN, GITHUB_REPOSITORY, VERSION, LATEST_TAG (vazia
-// no primeiro release), MIGRATE ("true"/"false"), OUTPUT (arquivo de saída).
+// no primeiro release), MIGRATE ("true"/"false"). As notas saem no stdout (o
+// workflow redireciona para o arquivo); avisos e contagem, no stderr.
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 
-const { GITHUB_TOKEN, GITHUB_REPOSITORY, VERSION, LATEST_TAG = '', MIGRATE = 'false', OUTPUT } = process.env;
+const { GITHUB_TOKEN, GITHUB_REPOSITORY, VERSION, LATEST_TAG = '', MIGRATE = 'false' } = process.env;
 
-if (!GITHUB_REPOSITORY || !VERSION || !OUTPUT) {
-  console.error('::error::GITHUB_REPOSITORY, VERSION e OUTPUT são obrigatórios.');
+if (!GITHUB_REPOSITORY || !VERSION) {
+  console.error('::error::GITHUB_REPOSITORY e VERSION são obrigatórios.');
   process.exit(1);
 }
 
@@ -97,7 +97,7 @@ function line(pr) {
   // não copiados da resposta da API.
   const number = Number.parseInt(pr.number, 10);
   const author = login(pr);
-  const by = author ? ` by [@${author.replace(/[[\]]/g, '\\$&')}](https://github.com/${encodeURIComponent(author.replace(/\[bot\]$/, ''))})` : '';
+  const by = author ? ` by [@${plainText(author)}](https://github.com/${encodeURIComponent(author.replace(/\[bot\]$/, ''))})` : '';
 
   return `- ${englishTitle(pr)} ([#${number}](${repoUrl}/pull/${number}))${by}`;
 }
@@ -111,7 +111,7 @@ for (const number of prNumbers()) {
     if (!pr.labels.some((label) => label.name === EXCLUDE)) prs.push(pr);
   } catch (error) {
     // Um PR que não veio não derruba o release: só fica de fora das notas.
-    console.log(`::warning::PR #${number} não entrou nas notas em inglês (${error.message}).`);
+    console.error(`::warning::PR #${number} não entrou nas notas em inglês (${error.message}).`);
   }
 }
 
@@ -157,5 +157,5 @@ out.push('php flarum cache:clear', 'php flarum assets:publish', '```', '');
 if (LATEST_TAG) out.push(`**Full changelog:** ${repoUrl}/compare/${LATEST_TAG}...${tag}`, '');
 out.push(`**Release:** ${repoUrl}/releases/tag/${tag}`);
 
-fs.writeFileSync(OUTPUT, `${out.join('\n')}\n`);
-console.log(`${prs.length} PR(s) nas notas em inglês.`);
+process.stdout.write(`${out.join('\n')}\n`);
+console.error(`${prs.length} PR(s) nas notas em inglês.`);
