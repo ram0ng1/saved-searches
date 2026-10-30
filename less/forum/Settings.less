@@ -1,0 +1,61 @@
+.SavedSearchesSettings {
+  max-width: 600px;
+
+  &-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px;
+  }
+
+  &-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--control-bg);
+  }
+
+  &-query {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-color);
+    font-weight: 600;
+  }
+
+  // Largura fixa: o select nativo mede só o texto, e nos temas com seta
+  // própria a opção mais longa ficava por baixo dela.
+  &-frequency {
+    flex: 0 0 13em;
+    width: 13em;
+
+    .Select-input {
+      width: 100%;
+    }
+  }
+
+  &-empty {
+    color: var(--muted-color);
+  }
+
+  &-add {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .FormControl {
+      flex: 1 1 200px;
+    }
+  }
+
+  // No celular a frequência desce para baixo do texto da busca.
+  @media @phone {
+    &-item {
+      flex-wrap: wrap;
+    }
+
+    &-query {
+      flex-basis: 100%;
+    }
+  }
+}

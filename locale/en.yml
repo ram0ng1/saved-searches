@@ -1,0 +1,63 @@
+ramon-saved-searches:
+  admin:
+    permissions:
+      use_label: Save searches and receive notifications of new results
+    settings:
+      max_per_user_label: Saved searches per user
+      max_per_user_help: How many searches each user can save. The saved searches run every 5 minutes through the scheduler, so `php flarum schedule:run` must be in the server's cron.
+
+  forum:
+    frequencies:
+      immediately: As soon as possible
+      hourly: Hourly
+      daily: Daily
+      weekly: Weekly
+    notifications:
+      single_text: "New result for “{query}”: {title}"
+      multiple_text: "{count, plural, one {# new result} other {# new results}} for “{query}”"
+    save_search:
+      button: Save Search
+      saved_message: Search saved. It's checked daily; change how often in your settings.
+      manage_link: Manage
+    settings:
+      heading: Saved Searches
+      help: Receive a notification when someone starts or replies to a discussion that matches one of your searches. Write it like in the forum search, filters included. Only what you haven't read yet counts.
+      empty: You haven't saved any search yet.
+      query_label: Search
+      query_placeholder: Words or filters to search for
+      frequency_label: How often to check
+      frequency_of_label: "How often to check “{query}”"
+      add_button: Save
+      delete_button: "Delete saved search “{query}”"
+      delete_confirm: "Are you sure you want to delete the saved search “{query}”?"
+      limit_reached: "You've reached the limit of {max} saved searches. Delete one to save another."
+      notify_label: Someone posts something that matches one of my saved searches
+
+  api:
+    limit_reached: "You can save up to {max} searches."
+    already_saved: You have already saved this search.
+    invalid_filters: This search can't be saved.
+
+  email:
+    subject: "[Saved search] New results for “{query}”"
+    plain:
+      body: |
+        {count, plural, one {There is # new result} other {There are # new results}} for your saved search “{query}”. The newest is in: {title}
+
+        {discussion_url}
+
+        See all results:
+        {search_url}
+
+        You can change how often you receive notifications, or delete this search, in your settings.
+    html:
+      body: |
+        {count, plural, one {There is # new result} other {There are # new results}} for your saved search “{query}”. The newest is in [{title}]({discussion_url}).
+
+        [See all results]({search_url}). You can change how often you receive notifications, or delete this search, in your settings.
+
+  lib:
+    gdpr:
+      export_description: The searches you saved and how often they run.
+      anonymize_description: Your saved searches are deleted.
+      delete_description: Your saved searches are deleted.

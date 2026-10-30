@@ -1,0 +1,312 @@
+name: Release Workflow
+
+on:
+  # Dispara quando um PR é MESCLADO no main carregando a label "release".
+  # O tipo de incremento vem das labels do PR:
+  #   - label "BC"        => minor (ex.: 2.1.25 -> 2.2.0)
+  #   - qualquer outra    => patch (ex.: 2.1.25 -> 2.1.26)
+  # A versão é derivada da ÚLTIMA TAG git — o composer.json NÃO tem mais
+  # campo "version" (fonte única de verdade = tags do VCS).
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  # Escape hatch manual: permite publicar um release escolhendo o bump
+  # explicitamente (inclui "major", que o fluxo automático nunca faz).
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Tipo de incremento da versão'
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+# Nega tudo ao GITHUB_TOKEN por padrão; o job declara o que precisa.
+permissions: {}
+
+# Serializa releases e nunca cancela um em andamento (um release
+# pela metade exigiria limpeza manual de tag).
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build_and_release:
+    name: Build e Publicação Automática
+    runs-on: ubuntu-latest
+    # Só roda em dispatch manual OU em PR mesclado que tenha a label "release".
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'release'))
+    permissions:
+      contents: write          # cria tag/release
+      pull-requests: read      # release-drafter lê PRs mesclados
+      id-token: write          # attest-build-provenance
+      attestations: write      # attest-build-provenance
+    steps:
+      # Audita todo o egress (modo audit por enquanto; depois, block).
+      - name: Harden Runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout do código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # fetch-depth: 0 traz todo o histórico E todas as tags — necessário
+          # para calcular a próxima versão a partir da última tag.
+          fetch-depth: 0
+          # PR mesclado: aponta para o commit de merge real no main.
+          # Dispatch manual: HEAD da branch escolhida (default main).
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: js/package-lock.json
+
+      - name: Instalar Dependências JS
+        run: |
+          cd js
+          npm ci
+
+      - name: Build JS (Flarum)
+        run: |
+          cd js
+          npm run build
+
+      - name: Calcular próxima versão
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_BUMP: ${{ github.event.inputs.bump }}
+          PR_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
+        run: |
+          set -euo pipefail
+
+          # 1. Determina o tipo de bump.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BUMP="$DISPATCH_BUMP"
+          else
+            # Label "BC" no PR => minor; qualquer outra label de tipo => patch.
+            case ",$PR_LABELS," in
+              *,BC,*) BUMP="minor" ;;
+              *)      BUMP="patch" ;;
+            esac
+          fi
+          echo "Bump: $BUMP (labels do PR: ${PR_LABELS:-<dispatch manual>})"
+
+          # 2. Última tag de versão (semver). O glob 'v[0-9]*' e o sort por
+          #    versão pegam a maior tag; %%-* descarta qualquer sufixo legado
+          #    de pré-release (ex.: -beta), pois agora publicamos estáveis.
+          LATEST="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1 || true)"
+          LATEST="${LATEST:-v0.0.0}"
+          CORE="${LATEST#v}"
+          CORE="${CORE%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CORE"
+          MAJOR="${MAJOR:-0}"; MINOR="${MINOR:-0}"; PATCH="${PATCH:-0}"
+          echo "Última tag: $LATEST -> base ${MAJOR}.${MINOR}.${PATCH}"
+
+          # 3. Incrementa conforme o bump.
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "::error::Bump inválido: '$BUMP'"; exit 1 ;;
+          esac
+
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          TAG="v${VERSION}"
+
+          # 4. Garante idempotência — não republica uma tag existente.
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::A tag ${TAG} já existe — nada a publicar."
+            exit 1
+          fi
+
+          echo "Nova versão: ${VERSION} (tag ${TAG})"
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "bump=${BUMP}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Só pede `php flarum migrate` quando a release traz migração nova desde a
+      # última tag. Arquivo novo em migrations/ é o único sinal confiável: uma
+      # migração já publicada e depois editada não roda de novo.
+      - name: Montar instruções de atualização
+        id: upgrade
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          LATEST="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1 || true)"
+
+          if [ -n "$LATEST" ]; then
+            NEW_MIGRATIONS="$(git diff --name-only --diff-filter=A "$LATEST" HEAD -- migrations/ || true)"
+          else
+            NEW_MIGRATIONS="$(git ls-files migrations/)"
+          fi
+
+          {
+            echo "## 📦 Como atualizar"
+            echo
+            if [ -n "$NEW_MIGRATIONS" ]; then
+              echo "> [!IMPORTANT]"
+              echo "> Esta versão altera o banco de dados. Rode \`php flarum migrate\` depois de atualizar."
+              echo
+            fi
+            echo '```bash'
+            echo "composer require ramon/saved-searches:${VERSION}"
+            if [ -n "$NEW_MIGRATIONS" ]; then
+              echo "php flarum migrate"
+            fi
+            echo "php flarum cache:clear"
+            echo "php flarum assets:publish"
+            echo '```'
+          } > "$RUNNER_TEMP/upgrade.md"
+
+          if [ -n "$NEW_MIGRATIONS" ]; then
+            echo "Migrações novas desde ${LATEST:-<sem tag>}:"
+            echo "$NEW_MIGRATIONS"
+            echo "migrate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nenhuma migração nova desde ${LATEST:-<sem tag>}."
+            echo "migrate=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "latest=${LATEST}" >> "$GITHUB_OUTPUT"
+
+          cat "$RUNNER_TEMP/upgrade.md"
+
+      # As notas em inglês, com links absolutos para o GitHub, depois do
+      # pt-BR: prontas para colar fora dele (o tópico da extensão no
+      # discuss.flarum.org). O título em inglês de cada PR vem da linha
+      # "EN: …" da descrição do PR; sem ela, vai o título do PR. O marcador
+      # `<!-- en -->` separa as duas partes (o post do fórum leva só o pt-BR).
+      - name: Notas em inglês
+        id: notes_en
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          LATEST_TAG: ${{ steps.upgrade.outputs.latest }}
+          MIGRATE: ${{ steps.upgrade.outputs.migrate }}
+          OUTPUT: ${{ runner.temp }}/notes-en.md
+        run: |
+          set -euo pipefail
+
+          node .github/scripts/release-notes-en.mjs > "$OUTPUT"
+
+          DELIM="EOF_$(openssl rand -hex 8)"
+          {
+            echo "footer<<${DELIM}"
+            cat "$RUNNER_TEMP/upgrade.md"
+            echo
+            echo "<!-- en -->"
+            echo
+            echo "---"
+            echo
+            cat "$OUTPUT"
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
+
+          cat "$OUTPUT"
+
+      - name: Publicar Release
+        id: create_release
+        uses: release-drafter/release-drafter@34d80673e067bdc0c24568d3af899c216adcfaa9  # v7.7.0
+        with:
+          publish: true
+          # Versão calculada acima — sobrepõe o version-resolver do
+          # .github/release-drafter.yml (que fica só como documentação).
+          version: ${{ steps.version.outputs.version }}
+          tag: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          # Aponta a tag/release para o commit de merge real (não para o
+          # merge simulado do evento pull_request).
+          commitish: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          # "Como atualizar" (com `php flarum migrate` só quando há migração
+          # nova) e as notas em inglês, montados nos passos anteriores.
+          footer: ${{ steps.notes_en.outputs.footer }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Provenance assinada (SLSA) para os artefatos do release.
+      - name: Atestar provenance dos artefatos
+        if: steps.create_release.outcome == 'success'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: |
+            composer.json
+            js/dist/*.js
+
+      - name: Publicar Release no Flarum
+        if: steps.create_release.outcome == 'success' && steps.create_release.outputs.html_url && vars.FLARUM_DISCUSSION_ID != ''
+        env:
+          FLARUM_API_KEY: ${{ secrets.FLARUM_API_KEY }}
+          FLARUM_DISCUSSION_ID: ${{ vars.FLARUM_DISCUSSION_ID }}
+          RELEASE_TAG: ${{ steps.create_release.outputs.tag_name }}
+          RELEASE_BODY: ${{ steps.create_release.outputs.body }}
+          RELEASE_URL: ${{ steps.create_release.outputs.html_url }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          # Só o pt-BR: as notas em inglês (depois do marcador) são para o discuss.
+          RELEASE_BODY="${RELEASE_BODY%%<!-- en -->*}"
+
+          PAYLOAD=$(jq -n \
+            --arg tag "$RELEASE_TAG" \
+            --arg body "$RELEASE_BODY" \
+            --arg url "$RELEASE_URL" \
+            --arg version "$VERSION" \
+            --arg discussion_id "$FLARUM_DISCUSSION_ID" \
+            '{
+              "data": {
+                "type": "posts",
+                "attributes": {
+                  "content": ("## 🚀 " + $tag + "\n\n" + $body + "\n\n**Instalação:**\n```\ncomposer require ramon/saved-searches:" + $version + "\n```\n\n[Ver release no GitHub](" + $url + ")")
+                },
+                "relationships": {
+                  "discussion": {
+                    "data": {
+                      "type": "discussions",
+                      "id": $discussion_id
+                    }
+                  }
+                }
+              }
+            }')
+
+          HTTP_STATUS=$(curl -s -o /tmp/flarum_response.json -w "%{http_code}" \
+            -X POST "https://ramonguilherme.com.br/api/posts" \
+            -H "Authorization: Token ${FLARUM_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Comentário publicado com sucesso no Flarum!"
+            echo "Post ID: $(jq -r '.data.id // empty' /tmp/flarum_response.json)"
+          else
+            echo "❌ Falha ao publicar comentário no Flarum (HTTP $HTTP_STATUS)"
+            echo "Response body:"
+            jq '.' /tmp/flarum_response.json
+            exit 1
+          fi
+
+      - name: Log de Status
+        if: always()
+        run: |
+          echo "Bump:        ${{ steps.version.outputs.bump }}"
+          echo "Nova versão: ${{ steps.version.outputs.version }}"
+          echo "Tag:         ${{ steps.version.outputs.tag }}"
+          echo "Migrate:     ${{ steps.upgrade.outputs.migrate }}"
+          echo "Release URL: ${{ steps.create_release.outputs.html_url }}"
