@@ -43,6 +43,12 @@ class SavedSearchRunner
     /** Discussões com novidade examinadas por busca e rodada. */
     public const MAX_CANDIDATES = 1000;
 
+    /**
+     * Segundos por rodada. O agendador chama a cada 5 minutos; parar antes
+     * evita que uma rodada encoste na outra num servidor lento.
+     */
+    public const TIME_BUDGET = 240.0;
+
 
     public function __construct(
         protected SearchManager $search,
@@ -52,31 +58,50 @@ class SavedSearchRunner
     }
 
     /**
+     * @param float|null $budget segundos que a rodada pode gastar; o que
+     *                           sobrar continua vencido para a próxima
      * @return int quantas buscas geraram notificação
      */
-    public function runDue(?Carbon $now = null): int
+    public function runDue(?Carbon $now = null, ?float $budget = null): int
     {
         $now ??= Carbon::now();
+        $budget ??= self::TIME_BUDGET;
+        $started = microtime(true);
         // Teto fixo da rodada: posts criados enquanto ela roda ficam para a próxima.
         $ceiling = (int) Post::query()->max('id');
         $notified = 0;
 
-        SavedSearch::query()
+        // Nada publicado desde a última vez: só a hora, numa consulta para todas.
+        SavedSearch::query()->due($now)->where('last_post_id', '>=', $ceiling)->update(['last_searched_at' => $now]);
+
+        // As que esperam há mais tempo primeiro: se o orçamento acabar, ninguém fica sempre por último.
+        $ids = SavedSearch::query()
             ->due($now)
-            ->with('user')
-            ->chunkById(100, function ($searches) use ($ceiling, $now, &$notified) {
-                foreach ($searches as $search) {
-                    try {
-                        $notified += $this->run($search, $ceiling, $now) ? 1 : 0;
-                    } catch (Throwable $e) {
-                        // Uma busca com problema não trava as outras e não perde
-                        // resultados: o marcador fica onde estava.
-                        $this->log->warning('[saved-searches] search '.$search->id.' failed: '.$e->getMessage());
-                        $search->last_searched_at = $now;
-                        $search->save();
-                    }
+            ->where('last_post_id', '<', $ceiling)
+            ->orderBy('last_searched_at')
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+
+        foreach (array_chunk($ids, 100) as $chunk) {
+            $searches = SavedSearch::query()->with('user')->whereIn('id', $chunk)->get()->sortBy(fn (SavedSearch $search) => array_search($search->id, $chunk, true));
+
+            foreach ($searches as $search) {
+                try {
+                    $notified += $this->run($search, $ceiling, $now) ? 1 : 0;
+                } catch (Throwable $e) {
+                    // Uma busca com problema não trava as outras e não perde
+                    // resultados: o marcador fica onde estava.
+                    $this->log->warning('[saved-searches] search '.$search->id.' failed: '.$e->getMessage());
+                    $search->last_searched_at = $now;
+                    $search->save();
                 }
-            });
+
+                if (microtime(true) - $started >= $budget) {
+                    return $notified;
+                }
+            }
+        }
 
         return $notified;
     }

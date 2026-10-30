@@ -240,6 +240,37 @@ class SavedSearchRunnerTest extends SavedSearchesTestCase
         $this->assertSame(1, $this->runSearches());
     }
 
+    /**
+     * Rodada com orçamento de tempo: as buscas mais antigas vão primeiro e o
+     * resto continua vencido para a próxima, em vez de a rodada encostar na
+     * seguinte.
+     */
+    public function test_orcamento_de_tempo_deixa_o_resto_para_a_proxima(): void
+    {
+        $this->prepareDatabase($this->merge(
+            ['saved_searches' => [
+                $this->savedSearch(1, 2, 'author:autora', ['author' => 'autora'], lastPostId: 20, lastSearchedAt: Carbon::now()->subDays(2)),
+                $this->savedSearch(2, 2, 'resposta', ['q' => 'resposta'], lastPostId: 20, lastSearchedAt: Carbon::now()->subDays(5)),
+            ]],
+            ['posts' => [$this->post(21, 1, 2, 'resposta nova')]],
+        ));
+
+        $notified = $this->app()->getContainer()->make(\Ramon\SavedSearches\Search\SavedSearchRunner::class)->runDue(null, 0.0);
+
+        $this->assertSame(1, $notified);
+        $this->assertSame(21, $this->search(2)->last_post_id, 'a mais antiga roda primeiro');
+        $this->assertSame(20, $this->search(1)->last_post_id, 'a outra fica para a próxima rodada');
+    }
+
+    /** Sem posts novos desde a última vez, a busca só ganha a hora, sem consulta própria. */
+    public function test_busca_sem_novidade_so_atualiza_a_hora(): void
+    {
+        $this->prepareDatabase(['saved_searches' => [$this->savedSearch(1, 2, 'author:autora', ['author' => 'autora'], lastPostId: 20)]]);
+
+        $this->assertSame(0, $this->runSearches());
+        $this->assertTrue($this->search(1)->last_searched_at->gt(Carbon::now()->subMinute()));
+    }
+
     public function test_texto_livre(): void
     {
         $this->prepareDatabase($this->merge(
