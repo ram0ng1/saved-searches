@@ -17,6 +17,7 @@ class RunSavedSearchesSchedule
 {
     public function __invoke(Event $event): void
     {
-        $event->everyFiveMinutes()->withoutOverlapping();
+        // A trava expira em 10 minutos: um processo morto não para tudo por um dia.
+        $event->everyFiveMinutes()->withoutOverlapping(10);
     }
 }

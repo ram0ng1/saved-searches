@@ -28,4 +28,5 @@ return Migration::createTable('saved_searches', function (Blueprint $table) {
 
     $table->foreign('user_id')->references('id')->on('users')->cascadeOnDelete();
     $table->index(['frequency', 'last_searched_at']);
+    $table->unique(['user_id', 'query']);
 });
