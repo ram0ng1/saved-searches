@@ -14,18 +14,19 @@ ramon-saved-searches:
       weekly: Semanalmente
     notifications:
       single_text: "Novo resultado para “{query}”: {title}"
-      multiple_text: "{count} novos resultados para “{query}”"
+      multiple_text: "{count, plural, one {# novo resultado} other {# novos resultados}} para “{query}”"
     save_search:
       button: Salvar busca
-      saved_message: Busca salva. Você será avisado dos novos resultados.
+      saved_message: Busca salva. Ela é verificada diariamente; mude a frequência nas suas configurações.
       manage_link: Gerenciar
     settings:
       heading: Buscas salvas
-      help: Seja avisado quando novas discussões ou respostas combinarem com uma busca. Funciona como a busca do fórum, filtros incluídos.
+      help: Seja avisado quando alguém começar ou responder uma discussão que combine com uma das suas buscas. Escreva como na busca do fórum, filtros incluídos. Só conta o que você ainda não leu.
       empty: Você ainda não salvou nenhuma busca.
       query_label: Busca
       query_placeholder: Palavras ou filtros a buscar
       frequency_label: Com que frequência verificar
+      frequency_of_label: "Com que frequência verificar “{query}”"
       add_button: Salvar
       delete_button: "Apagar a busca salva “{query}”"
       delete_confirm: "Apagar a busca salva “{query}”?"
@@ -41,7 +42,7 @@ ramon-saved-searches:
     subject: "[Busca salva] Novos resultados para “{query}”"
     plain:
       body: |
-        Há {count} novos resultados para a sua busca salva “{query}”. O mais recente está em: {title}
+        {count, plural, one {Há # novo resultado} other {Há # novos resultados}} para a sua busca salva “{query}”. O mais recente está em: {title}
 
         {discussion_url}
 
@@ -51,7 +52,7 @@ ramon-saved-searches:
         Você pode mudar a frequência dos avisos, ou apagar esta busca, nas suas configurações.
     html:
       body: |
-        Há {count} novos resultados para a sua busca salva “{query}”. O mais recente está em [{title}]({discussion_url}).
+        {count, plural, one {Há # novo resultado} other {Há # novos resultados}} para a sua busca salva “{query}”. O mais recente está em [{title}]({discussion_url}).
 
         [Ver todos os resultados]({search_url}). Você pode mudar a frequência dos avisos, ou apagar esta busca, nas suas configurações.
 

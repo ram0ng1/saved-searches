@@ -14,18 +14,19 @@ ramon-saved-searches:
       weekly: Weekly
     notifications:
       single_text: "New result for “{query}”: {title}"
-      multiple_text: "{count} new results for “{query}”"
+      multiple_text: "{count, plural, one {# new result} other {# new results}} for “{query}”"
     save_search:
       button: Save search
-      saved_message: Search saved. You'll be notified of new results.
+      saved_message: Search saved. It's checked daily; change how often in your settings.
       manage_link: Manage
     settings:
       heading: Saved searches
-      help: Get notified when new discussions or replies match a search. Use it like the forum search, filters included.
+      help: Get notified when someone starts or replies to a discussion that matches one of your searches. Write it like in the forum search, filters included. Only what you haven't read yet counts.
       empty: You haven't saved any search yet.
       query_label: Search
       query_placeholder: Words or filters to search for
       frequency_label: How often to check
+      frequency_of_label: "How often to check “{query}”"
       add_button: Save
       delete_button: "Delete the saved search “{query}”"
       delete_confirm: "Delete the saved search “{query}”?"
@@ -41,7 +42,7 @@ ramon-saved-searches:
     subject: "[Saved search] New results for “{query}”"
     plain:
       body: |
-        There are {count} new results for your saved search “{query}”. The newest is in: {title}
+        {count, plural, one {There is # new result} other {There are # new results}} for your saved search “{query}”. The newest is in: {title}
 
         {discussion_url}
 
@@ -51,7 +52,7 @@ ramon-saved-searches:
         You can change how often you're notified, or delete this search, in your settings.
     html:
       body: |
-        There are {count} new results for your saved search “{query}”. The newest is in [{title}]({discussion_url}).
+        {count, plural, one {There is # new result} other {There are # new results}} for your saved search “{query}”. The newest is in [{title}]({discussion_url}).
 
         [See all results]({search_url}). You can change how often you're notified, or delete this search, in your settings.
 

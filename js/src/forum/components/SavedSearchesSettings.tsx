@@ -7,7 +7,9 @@ import type Mithril from 'mithril';
 
 import type SavedSearch from '../../common/models/SavedSearch';
 import { FREQUENCIES, type Frequency } from '../../common/models/SavedSearch';
-import { maxSavedSearches, saveSearch, t } from '../utils/savedSearches';
+import Link from 'flarum/common/components/Link';
+
+import { filtersFor, maxSavedSearches, saveSearch, t, tText } from '../utils/savedSearches';
 
 /**
  * Lista das buscas salvas na página de configurações: mudar a frequência
@@ -57,8 +59,8 @@ export default class SavedSearchesSettings extends Component {
           <form className="SavedSearchesSettings-add" onsubmit={this.add.bind(this)}>
             <input
               className="FormControl"
-              aria-label={t('settings.query_label')}
-              placeholder={t('settings.query_placeholder')}
+              aria-label={tText('settings.query_label')}
+              placeholder={tText('settings.query_placeholder')}
               maxlength={255}
               value={this.query}
               oninput={(e: InputEvent) => (this.query = (e.target as HTMLInputElement).value)}
@@ -78,14 +80,14 @@ export default class SavedSearchesSettings extends Component {
 
     return (
       <li className="SavedSearchesSettings-item" key={id}>
-        <a className="SavedSearchesSettings-query" href={app.route('index', { q: search.query() })}>
+        <Link className="SavedSearchesSettings-query" href={app.route('index', { q: search.query() })}>
           {search.query()}
-        </a>
-        {this.frequencySelect(search.frequency(), (value) => this.changeFrequency(search, value), !!this.busy[id])}
+        </Link>
+        {this.frequencySelect(search.frequency(), (value) => this.changeFrequency(search, value), !!this.busy[id], search.query())}
         <Button
           className="Button Button--icon Button--link"
           icon="fas fa-trash-alt"
-          aria-label={t('settings.delete_button', { query: search.query() })}
+          aria-label={tText('settings.delete_button', { query: search.query() })}
           disabled={!!this.busy[id]}
           onclick={() => this.remove(search)}
         />
@@ -93,14 +95,14 @@ export default class SavedSearchesSettings extends Component {
     );
   }
 
-  frequencySelect(value: Frequency, onchange: (value: Frequency) => void, disabled = false) {
+  frequencySelect(value: Frequency, onchange: (value: Frequency) => void, disabled = false, query?: string) {
     const options: Record<string, Mithril.Children> = {};
     FREQUENCIES.forEach((frequency) => (options[frequency] = t(`frequencies.${frequency}`)));
 
     return (
       <Select
         className="SavedSearchesSettings-frequency"
-        aria-label={t('settings.frequency_label')}
+        aria-label={query ? tText('settings.frequency_of_label', { query }) : tText('settings.frequency_label')}
         options={options}
         value={value}
         disabled={disabled}
@@ -115,7 +117,7 @@ export default class SavedSearchesSettings extends Component {
 
     this.adding = true;
 
-    saveSearch(this.query, this.frequency)
+    saveSearch(this.query, filtersFor(this.query.trim()), this.frequency)
       .then((search) => {
         this.searches.push(search);
         this.query = '';
@@ -143,7 +145,7 @@ export default class SavedSearchesSettings extends Component {
   }
 
   remove(search: SavedSearch) {
-    if (!confirm(String(t('settings.delete_confirm', { query: search.query() })))) return;
+    if (!confirm(tText('settings.delete_confirm', { query: search.query() }))) return;
 
     const id = search.id()!;
     this.busy[id] = true;

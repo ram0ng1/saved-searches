@@ -8,7 +8,7 @@ import type ItemList from 'flarum/common/utils/ItemList';
 import type Mithril from 'mithril';
 
 import SavedSearchesSettings from './components/SavedSearchesSettings';
-import { canUseSavedSearches, saveSearch, t } from './utils/savedSearches';
+import { canUseSavedSearches, currentSearch, saveSearch, t } from './utils/savedSearches';
 
 export { default as extend } from './extend';
 
@@ -37,11 +37,12 @@ app.initializers.add('ramon-saved-searches', () => {
     });
   });
 
-  // "Salvar esta busca" só aparece com uma busca ativa na lista de discussões.
+  // "Salvar busca" só aparece com uma busca ativa na lista de discussões.
   extend(IndexPage.prototype, 'actionItems', function (items: ItemList<Mithril.Children>) {
-    const query = app.search.state.params().q;
+    if (!canUseSavedSearches()) return;
 
-    if (!query || !canUseSavedSearches()) return;
+    const search = currentSearch();
+    if (!search) return;
 
     items.add(
       'saveSearch',
@@ -52,7 +53,7 @@ app.initializers.add('ramon-saved-searches', () => {
           const button = e.currentTarget as HTMLButtonElement;
           button.disabled = true;
 
-          saveSearch(query)
+          saveSearch(search.query, search.filters)
             .then(() => {
               app.alerts.show(
                 {
